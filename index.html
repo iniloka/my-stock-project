@@ -1,59 +1,95 @@
 <!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股健康度評估儀表板</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; color: #2c3e50; }
+        .search-container { display: flex; justify-content: center; margin-bottom: 30px; gap: 10px; }
+        input { padding: 12px; font-size: 16px; width: 300px; border: 1px solid #ccc; border-radius: 6px; }
+        button { padding: 12px 24px; background-color: #2980b9; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .dashboard { display: none; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .full-width { grid-column: 1 / -1; }
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .data-label { font-weight: bold; color: #7f8c8d; }
+    </style>
+</head>
+<body>
 
-async function searchStock() {
-    const input = document.getElementById('stockInput').value.trim();
-    const dashboard = document.getElementById('dashboard');
+    <h1>📈 台股健康度評估儀表板</h1>
     
-    if (!input) {
-        alert("請輸入股票代號！");
-        return;
-    }
+    <div class="search-container">
+        <input type="text" id="stockInput" placeholder="請輸入股票代號 (例: 2330)">
+        <button onclick="searchStock()">分析評估</button>
+    </div>
 
-    // 顯示「載入中」的感覺（選做：可以用 alert 簡單提示，或直接執行 fetch）
-    console.log("正在分析：" + input);
+    <div id="dashboard" class="dashboard">
+        <div class="card">
+            <h3>📊 基礎資訊速覽</h3>
+            <div class="data-row"><span class="data-label">股票名稱：</span><span id="stockName">-</span></div>
+            <div class="data-row"><span class="data-label">目前本益比：</span><span id="stockPe">-</span></div>
+            <div class="data-row"><span class="data-label">最新殖利率：</span><span id="stockYield">-</span></div>
+        </div>
 
-    try {
-        // 這行是關鍵！它會去呼叫你剛建好的 Netlify 後端
-        const API_URL = `/.netlify/functions/stockInfo?id=${input}`;
-        const response = await fetch(API_URL);
-        const data = await response.json();
+        <div class="card">
+            <h3>🏥 股票健康度評估</h3>
+            <div class="data-row"><span class="data-label">綜合評級：</span><span id="healthScore">-</span></div>
+            <div class="data-row"><span class="data-label">股價淨值比：</span><span id="debtRatio">-</span></div>
+            <p style="font-size: 12px; color: #95a5a6;">* 資料來源：證交所官方 OpenAPI</p>
+        </div>
 
-        if (data.error) {
-            alert("錯誤: " + data.error);
-            return;
+        <div class="card full-width">
+            <h3>💡 綜合結論與建議</h3>
+            <p id="summaryText" style="line-height: 1.6;">請輸入代號進行分析...</p>
+        </div>
+    </div>
+
+    <script>
+        async function searchStock() {
+            const input = document.getElementById('stockInput').value.trim();
+            const dashboard = document.getElementById('dashboard');
+            
+            if (!input) { alert("請輸入股票代號！"); return; }
+
+            try {
+                // 呼叫你剛建好的 Netlify 後端
+                const API_URL = `/.netlify/functions/stockInfo?id=${input}`;
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                if (data.error) { alert("錯誤：" + data.error); return; }
+
+                // 填入資料
+                document.getElementById('stockName').innerText = `${data.id} ${data.name}`;
+                document.getElementById('stockPe').innerText = data.pe + " 倍";
+                document.getElementById('stockYield').innerText = data.yield + " %";
+                document.getElementById('debtRatio').innerText = data.pb;
+
+                // 自動化評估邏輯
+                let summary = "";
+                const pe = parseFloat(data.pe);
+                if (pe < 15) {
+                    summary = "目前本益比低於 15 倍，估值相對便宜。建議檢查基本面是否穩健。";
+                    document.getElementById('healthScore').innerText = "優 (🌟🌟🌟🌟🌟)";
+                } else if (pe > 25) {
+                    summary = "本益比高於 25 倍，市場預期較高。建議分批佈局，不宜追高。";
+                    document.getElementById('healthScore').innerText = "普 (🌟🌟🌟)";
+                } else {
+                    summary = "本益比處於合理區間，適合長期追蹤營收成長。";
+                    document.getElementById('healthScore').innerText = "良 (🌟🌟🌟🌟)";
+                }
+
+                document.getElementById('summaryText').innerText = summary;
+                dashboard.style.display = 'grid';
+
+            } catch (err) {
+                alert("連線失敗，請確定後端已部署成功！");
+                console.error(err);
+            }
         }
-
-        // --- 把抓到的真實資料填入網頁 ---
-        document.getElementById('stockName').innerText = `${data.id} ${data.name}`;
-        document.getElementById('stockPe').innerText = data.pe + " 倍";
-        document.getElementById('stockYield').innerText = data.yield + " %";
-        // 額外資訊：股價淨值比
-        document.getElementById('debtRatio').innerText = data.pb; 
-        document.getElementById('grossMargin').innerText = "官方 API 提供中";
-
-        // 自動化評估邏輯
-        let summary = "";
-        const pe = parseFloat(data.pe);
-        if (pe < 15) {
-            summary = "目前本益比低於 15 倍，估值相對便宜。建議檢查基本面是否穩健。";
-            document.getElementById('healthScore').innerText = "良 (🌟🌟🌟🌟)";
-        } else if (pe > 25) {
-            summary = "本益比高於 25 倍，市場預期較高。建議分批佈局，不宜追高。";
-            document.getElementById('healthScore').innerText = "普 (🌟🌟🌟)";
-        } else {
-            summary = "本益比處於合理區間，適合長期追蹤營收成長。";
-            document.getElementById('healthScore').innerText = "優 (🌟🌟🌟🌟🌟)";
-        }
-
-        document.getElementById('summaryText').innerText = summary;
-        document.getElementById('buyPrice').innerText = "請參考本益比區間";
-        document.getElementById('sellPrice').innerText = "視技術面壓力而定";
-
-        // 顯示結果
-        dashboard.style.display = 'grid';
-
-    } catch (err) {
-        alert("連線失敗，請確定後端已部署成功！");
-        console.error(err);
-    }
-}
+    </script>
+</body>
+</html>
