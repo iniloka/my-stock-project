@@ -1,9 +1,8 @@
 // api/stockInfo.js
-let cache = { data: null, timestamp: 0 };
-const CACHE_DURATION = 1000 * 60 * 15; // 15 分鐘快取，減輕伺服器負擔
+let cache = { list: null, timestamp: 0 };
+const CACHE_DURATION = 1000 * 60 * 60 * 12; // 名單快取 12 小時
 
 export default async function handler(req, res) {
-    // 允許前端跨域讀取
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
 
@@ -11,73 +10,78 @@ export default async function handler(req, res) {
     if (!query) return res.status(400).json({ error: '請提供股票代號或名稱' });
 
     const searchQ = query.trim().toUpperCase();
-    const now = Date.now();
 
     try {
-        // 1. 同時下載上市與上櫃資料庫
-        if (!cache.data || (now - cache.timestamp > CACHE_DURATION)) {
-            const [twseInfo, twsePrice, otcInfo, otcPrice] = await Promise.all([
-                fetch('https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL').then(r => r.json()),
-                fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_AVG_ALL').then(r => r.json()),
-                fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_peratio_analysis').then(r => r.json()),
+        // 1. 先抓取台灣上市櫃名單 (用來比對中文名稱與判斷上市/上櫃)
+        if (!cache.list || (Date.now() - cache.timestamp > CACHE_DURATION)) {
+            const [twse, tpex] = await Promise.all([
+                fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL').then(r => r.json()),
                 fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes').then(r => r.json())
             ]);
-            cache.data = { twseInfo, twsePrice, otcInfo, otcPrice };
-            cache.timestamp = now;
+            cache.list = { twse, tpex };
+            cache.timestamp = Date.now();
         }
 
-        const { twseInfo, twsePrice, otcInfo, otcPrice } = cache.data;
-        let finalData = null;
+        let stockId = searchQ;
+        let suffix = '.TW'; // 預設為上市
 
-        // 2. 搜尋上市 (支援代號與名稱)
-        const tPriceMatch = twsePrice.find(s => s.Code === searchQ || s.Name.toUpperCase().includes(searchQ));
-        if (tPriceMatch) {
-            const code = tPriceMatch.Code;
-            const tInfoMatch = twseInfo.find(s => s.Code === code);
-            finalData = {
-                id: code, name: tPriceMatch.Name,
-                price: parseFloat(tPriceMatch.ClosingPrice.replace(/,/g, '')),
-                pe: tInfoMatch ? parseFloat(tInfoMatch.PEratio) : NaN,
-                yield: tInfoMatch ? tInfoMatch.DividendYield : "-",
-                pb: tInfoMatch ? tInfoMatch.PBratio : "-"
-            };
+        const tMatch = cache.list.twse.find(s => s.Code === searchQ || s.Name.includes(searchQ));
+        if (tMatch) {
+            stockId = tMatch.Code;
+            suffix = '.TW';
         } else {
-            // 3. 搜尋上櫃 (支援代號與名稱)
-            const oPriceMatch = otcPrice.find(s => s.SecuritiesCompanyCode === searchQ || s.CompanyName.toUpperCase().includes(searchQ));
-            if (oPriceMatch) {
-                const code = oPriceMatch.SecuritiesCompanyCode;
-                const oInfoMatch = otcInfo.find(s => s.SecuritiesCompanyCode === code);
-                finalData = {
-                    id: code, name: oPriceMatch.CompanyName,
-                    price: parseFloat(oPriceMatch.Close.replace(/,/g, '')),
-                    pe: oInfoMatch ? parseFloat(oInfoMatch.PriceEarningsRatio) : NaN,
-                    yield: oInfoMatch ? oInfoMatch.DividendYield : "-",
-                    pb: oInfoMatch ? oInfoMatch.PriceBookRatio : "-"
-                };
+            const oMatch = cache.list.tpex.find(s => s.SecuritiesCompanyCode === searchQ || s.CompanyName.includes(searchQ));
+            if (oMatch) {
+                stockId = oMatch.SecuritiesCompanyCode;
+                suffix = '.TWO'; // 這是 Yahoo Finance 專用的上櫃代號
+            } else if (!/^\d{4,6}$/.test(searchQ)) {
+                return res.status(404).json({ error: '找不到該股票，請確認名稱' });
             }
         }
 
-        if (!finalData) return res.status(404).json({ error: '找不到該股票或 ETF' });
+        // 2. 核心大絕招：向 Yahoo Finance 索取真實財報數據
+        const yfUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${stockId}${suffix}`;
+        const yfRes = await fetch(yfUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const yfData = await yfRes.json();
 
-        // 4. 計算與狀態判定
-        const price = finalData.price || 0;
-        const pe = finalData.pe;
+        if (!yfData.quoteResponse || !yfData.quoteResponse.result || yfData.quoteResponse.result.length === 0) {
+            return res.status(404).json({ error: '國際資料庫查無此代號' });
+        }
+
+        const data = yfData.quoteResponse.result[0];
+
+        // 3. 整理真實數據 (完全不經過政府蓋牌)
+        const price = data.regularMarketPrice || 0;
+        const eps = data.epsTrailingTwelveMonths; // 真實的近四季 EPS
+        const pe = data.trailingPE;               // 真實本益比
         
-        // 判定是否為 ETF (代號 00 開頭，或無本益比且無殖利率)
-        finalData.isETF = finalData.id.startsWith('00') || (isNaN(pe) && finalData.yield === "-");
-        // 判定是否有有效本益比 (排除 M31 虧損時的狀況)
-        finalData.hasPE = !isNaN(pe) && pe > 0;
+        // 處理 Yahoo 的殖利率格式
+        let yieldVal = "-";
+        if (data.dividendYield) yieldVal = data.dividendYield.toFixed(2);
+        else if (data.trailingAnnualDividendYield) yieldVal = (data.trailingAnnualDividendYield * 100).toFixed(2);
 
+        let finalData = {
+            id: stockId,
+            name: data.longName || data.shortName || stockId,
+            price: price,
+            eps: eps !== undefined ? eps.toFixed(2) : "N/A",
+            pe: pe !== undefined ? pe.toFixed(2) : NaN,
+            yield: yieldVal,
+            pb: data.priceToBook !== undefined ? data.priceToBook.toFixed(2) : "-"
+        };
+
+        // 狀態判定
+        finalData.isETF = finalData.id.startsWith('00') || (isNaN(finalData.pe) && finalData.eps === "N/A");
+        finalData.hasPE = !isNaN(finalData.pe) && finalData.pe > 0;
+        
         finalData.suggestedBuy = (price * 0.95).toFixed(2);
         finalData.suggestedStop = (price * 0.88).toFixed(2);
-        
-        // 暫代法人籌碼
         finalData.foreign = "-"; finalData.trust = "-"; finalData.dealer = "-";
 
         return res.status(200).json(finalData);
 
     } catch (error) {
-        console.error("Vercel Backend Error:", error);
-        return res.status(500).json({ error: '伺服器向證交所抓取資料失敗' });
+        console.error("Backend Error:", error);
+        return res.status(500).json({ error: '伺服器錯誤，無法抓取財報' });
     }
 }
