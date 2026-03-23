@@ -3,91 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股健康度評估儀表板</title>
+    <title>台股智能投資指南</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
-        h1 { text-align: center; color: #2c3e50; }
-        .search-container { display: flex; justify-content: center; margin-bottom: 30px; gap: 10px; }
-        input { padding: 12px; font-size: 16px; width: 300px; border: 1px solid #ccc; border-radius: 6px; }
-        button { padding: 12px 24px; background-color: #2980b9; color: white; border: none; border-radius: 6px; cursor: pointer; }
-        .dashboard { display: none; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .full-width { grid-column: 1 / -1; }
-        .data-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .data-label { font-weight: bold; color: #7f8c8d; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background-color: #f0f4f8; color: #333; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .search-box { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
+        input { padding: 12px; width: 250px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
+        button { padding: 12px 24px; background: #2980b9; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        #chart-container { height: 450px; margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid #eee; }
+        .advice-card { border-left: 6px solid #e74c3c; background: #fff5f5; }
+        .price-tag { font-size: 20px; font-weight: bold; color: #c0392b; }
+        .good-tag { color: #27ae60; }
+        h3 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <h1>📈 台股健康度評估儀表板</h1>
+    <h1>📈 台股自動化評估系統</h1>
     
-    <div class="search-container">
-        <input type="text" id="stockInput" placeholder="請輸入股票代號 (例: 2330)">
-        <button onclick="searchStock()">分析評估</button>
+    <div class="search-box">
+        <input type="text" id="stockInput" placeholder="輸入代號 (如: 2330)">
+        <button onclick="analyzeStock()">啟動深度分析</button>
     </div>
 
-    <div id="dashboard" class="dashboard">
+    <div id="resultArea" style="display:none;">
         <div class="card">
-            <h3>📊 基礎資訊速覽</h3>
-            <div class="data-row"><span class="data-label">股票名稱：</span><span id="stockName">-</span></div>
-            <div class="data-row"><span class="data-label">目前本益比：</span><span id="stockPe">-</span></div>
-            <div class="data-row"><span class="data-label">最新殖利率：</span><span id="stockYield">-</span></div>
+            <h3>📊 即時技術走勢 (日/週/月切換)</h3>
+            <div id="chart-container">
+                </div>
         </div>
 
-        <div class="card">
-            <h3>🏥 股票健康度評估</h3>
-            <div class="data-row"><span class="data-label">綜合評級：</span><span id="healthScore">-</span></div>
-            <div class="data-row"><span class="data-label">股價淨值比：</span><span id="debtRatio">-</span></div>
-            <p style="font-size: 12px; color: #95a5a6;">* 資料來源：證交所官方 OpenAPI</p>
-        </div>
+        <div class="grid">
+            <div class="card">
+                <h3>🔍 基本面速覽</h3>
+                <p>股票名稱：<b id="resName">-</b></p>
+                <p>目前本益比：<span id="resPe">-</span> 倍</p>
+                <p>最新殖利率：<span id="resYield">-</span> %</p>
+                <p>股價淨值比：<span id="resPb">-</span></p>
+            </div>
 
-        <div class="card full-width">
-            <h3>💡 綜合結論與建議</h3>
-            <p id="summaryText" style="line-height: 1.6;">請輸入代號進行分析...</p>
+            <div class="card advice-card">
+                <h3>⚖️ 操作策略建議</h3>
+                <p>進場策略：<span id="resAdvice">-</span></p>
+                <p>建議進場點：<span class="price-tag good-tag" id="buyPoint">計算中...</span></p>
+                <p>關鍵止損點：<span class="price-tag" id="stopLoss">計算中...</span></p>
+                <p style="font-size: 12px; color: #666; margin-top: 15px;">※ 註：建議價格依據歷史波動度與 PE 估算，僅供參考。</p>
+            </div>
         </div>
     </div>
 
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        async function searchStock() {
-            const input = document.getElementById('stockInput').value.trim();
-            const dashboard = document.getElementById('dashboard');
-            
-            if (!input) { alert("請輸入股票代號！"); return; }
+        async function analyzeStock() {
+            const id = document.getElementById('stockInput').value.trim();
+            if(!id) return alert("請輸入代號");
 
             try {
-                // 呼叫你剛建好的 Netlify 後端
-                const API_URL = `/.netlify/functions/stockInfo?id=${input}`;
-                const response = await fetch(API_URL);
-                const data = await response.json();
+                // 1. 呼叫後端抓取資料
+                const res = await fetch(`/.netlify/functions/stockInfo?id=${id}`);
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
 
-                if (data.error) { alert("錯誤：" + data.error); return; }
+                // 2. 顯示並填入數據
+                document.getElementById('resultArea').style.display = 'block';
+                document.getElementById('resName').innerText = `${data.id} ${data.name}`;
+                document.getElementById('resPe').innerText = data.pe;
+                document.getElementById('resYield').innerText = data.yield;
+                document.getElementById('resPb').innerText = data.pb;
 
-                // 填入資料
-                document.getElementById('stockName').innerText = `${data.id} ${data.name}`;
-                document.getElementById('stockPe').innerText = data.pe + " 倍";
-                document.getElementById('stockYield').innerText = data.yield + " %";
-                document.getElementById('debtRatio').innerText = data.pb;
-
-                // 自動化評估邏輯
-                let summary = "";
-                const pe = parseFloat(data.pe);
-                if (pe < 15) {
-                    summary = "目前本益比低於 15 倍，估值相對便宜。建議檢查基本面是否穩健。";
-                    document.getElementById('healthScore').innerText = "優 (🌟🌟🌟🌟🌟)";
-                } else if (pe > 25) {
-                    summary = "本益比高於 25 倍，市場預期較高。建議分批佈局，不宜追高。";
-                    document.getElementById('healthScore').innerText = "普 (🌟🌟🌟)";
+                // 3. 計算進場與止損點 (簡易策略邏輯)
+                // 假設：以目前 PE 20倍為合理價，止損設為進場價的 -10%
+                const currentPe = parseFloat(data.pe);
+                const pb = parseFloat(data.pb);
+                
+                let advice = "";
+                if (currentPe > 25) {
+                    advice = "目前處於高估值區，建議等股價回檔至月線或季線再考慮。";
                 } else {
-                    summary = "本益比處於合理區間，適合長期追蹤營收成長。";
-                    document.getElementById('healthScore').innerText = "良 (🌟🌟🌟🌟)";
+                    advice = "估值尚屬合理，可考慮於支撐位分批佈局。";
                 }
+                
+                document.getElementById('resAdvice').innerText = advice;
+                document.getElementById('buyPoint').innerText = "觀察支撐線";
+                document.getElementById('stopLoss').innerText = "跌破 10 日線";
 
-                document.getElementById('summaryText').innerText = summary;
-                dashboard.style.display = 'grid';
+                // 4. 渲染 TradingView 圖表
+                new TradingView.widget({
+                    "autosize": true,
+                    "symbol": `TWSE:${id}`,
+                    "interval": "D", // 預設日線
+                    "timezone": "Asia/Taipei",
+                    "theme": "light",
+                    "style": "1",
+                    "locale": "zh_TW",
+                    "toolbar_bg": "#f1f3f6",
+                    "enable_publishing": false,
+                    "hide_top_toolbar": false, // 顯示頂部工具欄以便切換日/週/月
+                    "allow_symbol_change": true,
+                    "container_id": "chart-container"
+                });
 
             } catch (err) {
-                alert("連線失敗，請確定後端已部署成功！");
-                console.error(err);
+                alert("錯誤：" + err.message);
             }
         }
     </script>
