@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股全能價值投資儀表板 (國際數據版)</title>
+    <title>台股全能價值投資儀表板 (雙引擎穩定版)</title>
     <style>
         :root { --primary: #1e293b; --blue: #3b82f6; --green: #16a34a; --red: #dc2626; --bg: #f8fafc; }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--primary); max-width: 1100px; margin: 0 auto; padding: 20px; line-height: 1.6; }
         
         .search-box { text-align: center; margin: 30px 0; }
-        input { padding: 12px 15px; width: 300px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 16px; outline: none; }
-        button { padding: 12px 25px; background: var(--blue); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; margin-left: 10px; }
+        input { padding: 14px 15px; width: 320px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
+        input:focus { border-color: var(--blue); }
+        button { padding: 14px 25px; background: var(--blue); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; margin-left: 10px; }
         
         .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 25px; }
         .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
@@ -43,10 +44,10 @@
 <body>
 
     <div class="search-box">
-        <h2 style="color: var(--primary);">台股全能價值投資儀表板 <span style="font-size:14px; color:#64748b;">(Yahoo國際財報源)</span></h2>
-        <input type="text" id="sid" placeholder="支援代號或名稱 (如: 0050, M31, 2330)">
+        <h2 style="color: var(--primary);">台股全能價值投資儀表板</h2>
+        <input type="text" id="sid" placeholder="支援代號與名稱 (如: 0050, 2330, M31)" onkeypress="if(event.keyCode===13) runAnalysis()">
         <button onclick="runAnalysis()">開始分析</button>
-        <div id="loader" class="loading">📡 從國際資料庫調閱真實財報中...</div>
+        <div id="loader" class="loading">📡 Vercel 雙引擎資料分析中...</div>
     </div>
 
     <div id="report" style="display:none;" class="grid">
@@ -82,12 +83,12 @@
 
         <div>
             <div class="card" style="margin-bottom: 25px;">
-                <h3>🔍 核心基本面指標 (真實數據)</h3>
+                <h3>🔍 核心基本面指標</h3>
                 <div class="data-row"><span>目前股價</span><b id="resPrice" style="font-size:20px;">-</b></div>
                 <div class="data-row"><span>近四季 EPS</span><b id="resEps" class="val-blue">-</b></div>
-                <div class="helper-box">💰 <b>實體獲利：</b>若為負數代表公司正在虧損燒錢中。</div>
+                <div class="helper-box">💰 <b>實體獲利：</b>若為紅字負數代表公司目前處於虧損狀態。</div>
                 <div class="data-row"><span>本益比 (PE)</span><b id="resPe" class="data-value">-</b></div>
-                <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。虧損公司無此數值。</div>
+                <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。ETF無此數值。</div>
                 <div class="data-row"><span>現金殖利率</span><b id="resYield" class="data-value">-</b></div>
                 <div class="helper-box">🏦 <b>定存利率：</b>每年配息率。 > 5% 適合存股。</div>
                 <div class="data-row" style="border:none;"><span>股價淨值比 (PB)</span><b id="resPb" class="data-value">-</b></div>
@@ -98,7 +99,7 @@
                 <h3>🎯 進出場策略建議 (歷史估值法)</h3>
                 <div class="data-row"><span class="data-label">建議進場區間：</span><span id="buyRange" class="val-green">-</span></div>
                 <div class="data-row" style="border:none;"><span class="data-label">建議賣出區間：</span><span id="sellRange" class="val-red">-</span></div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 10px;">*註：此區間基於歷史平均本益比推算，若 EPS 為負數則無法推算。</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 10px;">*註：此區間基於歷史平均本益比推算，若為虧損股則無法推算。</div>
             </div>
         </div>
     </div>
@@ -107,74 +108,95 @@
         const themeDB = {
             "2455": { cate: "電子零組件", tags: ["低軌衛星", "5G 通訊"] },
             "2330": { cate: "半導體代工", tags: ["AI 核心", "先進製程", "護國神山"] },
-            "6643": { cate: "半導體矽智財", tags: ["IP 授權", "高成長", "高風險"] }
+            "6643": { cate: "半導體矽智財", tags: ["IP 授權", "高本夢比"] }
         };
 
         async function runAnalysis() {
             const query = document.getElementById('sid').value.trim();
-            if(!query) return alert("請輸入股票代號或名稱！");
+            if(!query) return;
             
             const loader = document.getElementById('loader');
             loader.style.display = 'block';
             document.getElementById('report').style.display = 'none';
 
             try {
-                // 呼叫我們升級後的 Vercel Yahoo 財報後端
+                // 呼叫 Vercel API
                 const res = await fetch(`/api/stockInfo?id=${encodeURIComponent(query)}`);
                 const data = await res.json();
                 if(data.error) throw new Error(data.error);
 
                 document.getElementById('stockTitle').innerText = `⚖️ ${data.name} (${data.id}) 診斷報告`;
-                
-                // 標籤系統
                 const info = themeDB[data.id] || { cate: data.isETF ? "ETF 指數基金" : "上市/櫃公司", tags: [] };
                 let tags = `<span class="tag">🏭 ${info.cate}</span>`;
                 info.tags.forEach(t => tags += `<span class="tag">🔥 ${t}</span>`);
                 document.getElementById('tagArea').innerHTML = tags;
 
-                // 填寫共用數據
                 document.getElementById('resPrice').innerText = data.price + " 元";
                 document.getElementById('resYield').innerText = data.yield !== "-" ? data.yield + "%" : "-";
                 document.getElementById('resPb').innerText = data.pb !== "-" ? data.pb : "-";
                 document.getElementById('buyP').innerText = data.suggestedBuy + " 元";
                 document.getElementById('stopP').innerText = data.suggestedStop + " 元";
-                
-                // EPS 不再是推算的了，是真實抓到的！
-                document.getElementById('resEps').innerText = data.eps !== "N/A" ? data.eps + " 元" : "N/A";
 
-                // 分流邏輯：ETF vs 虧損股(無PE) vs 正常股票
+                // 動態判斷 EPS 狀態 (解決虧損股的痛點)
+                const epsVal = parseFloat(data.eps);
+
                 if (data.isETF) {
-                    document.getElementById('resPe').innerText = "ETF 無本益比";
+                    // ETF 狀態
+                    document.getElementById('resEps').innerText = "ETF 無此數據";
+                    document.getElementById('resEps').className = "val-blue";
+                    document.getElementById('resPe').innerText = "無本益比";
+                    
                     document.getElementById('healthScore').innerText = "被動投資 (🌟🌟🌟🌟)";
-                    document.getElementById('resGross').innerText = "N/A";
-                    document.getElementById('resDebt').innerText = "N/A";
-                    document.getElementById('resHighlight').innerText = "ETF 屬於一籃子股票，請關注其追蹤指數之趨勢。";
+                    document.getElementById('resGross').innerText = "-";
+                    document.getElementById('resDebt').innerText = "-";
+                    document.getElementById('resHighlight').innerText = "ETF 屬於一籃子股票，請關注其追蹤指數之總體趨勢。";
                     document.getElementById('adviceText').innerText = " 建議以「定期定額」或「逢低買進」策略為主。";
                     document.getElementById('buyRange').innerText = "依技術面支撐推算";
                     document.getElementById('sellRange').innerText = "依技術面壓力推算";
 
-                } else if (!data.hasPE) {
-                    // 若公司虧損，EPS會顯示負數，PE則無法顯示
-                    document.getElementById('resPe').innerText = "無效 / 負數";
+                } else if (!isNaN(epsVal) && epsVal < 0) {
+                    // 真實虧損狀態 (Yahoo 引擎抓取成功)
+                    document.getElementById('resEps').innerText = data.eps + " 元 (虧損)";
+                    document.getElementById('resEps').className = "val-red"; // 變紅字警告
+                    document.getElementById('resPe').innerText = "無效 (虧損中)";
+                    
                     document.getElementById('healthScore').innerText = "風險偏高 (⚠️)";
                     document.getElementById('resGross').innerText = "請參閱最新季報";
                     document.getElementById('resDebt').innerText = "請參閱最新季報";
-                    document.getElementById('resHighlight').innerText = `注意！此公司目前 EPS 為 ${data.eps}，呈現虧損狀態，無法計算本益比。`;
-                    document.getElementById('adviceText').innerText = " 公司目前未獲利，股價多由題材與本夢比支撐，操作務必極度嚴格執行止損。";
+                    document.getElementById('resHighlight').innerText = `注意！此公司目前近四季 EPS 為 ${data.eps}，呈現虧損狀態。`;
+                    document.getElementById('adviceText').innerText = " 公司目前未獲利，股價多由未來題材支撐，操作務必極度嚴格執行止損。";
                     document.getElementById('buyRange').innerText = "無法估算 (無獲利基礎)";
                     document.getElementById('sellRange').innerText = "無法估算";
 
+                } else if (isNaN(epsVal) || data.eps === "N/A") {
+                    // 官方蓋牌且 Yahoo 引擎被擋
+                    document.getElementById('resEps').innerText = "官方蓋牌 / 虧損";
+                    document.getElementById('resEps').className = "val-red";
+                    document.getElementById('resPe').innerText = "無效 / 負值";
+                    
+                    document.getElementById('healthScore').innerText = "風險偏高 (⚠️)";
+                    document.getElementById('resGross').innerText = "請參閱最新季報";
+                    document.getElementById('resDebt').innerText = "請參閱最新季報";
+                    document.getElementById('resHighlight').innerText = "官方資料庫未提供有效本益比，無法反推 EPS。可能因近期虧損或數值異常。";
+                    document.getElementById('adviceText').innerText = " 獲利能力不穩定或本益比極端，操作此類股票務必嚴格設定止損點。";
+                    document.getElementById('buyRange').innerText = "無法估算";
+                    document.getElementById('sellRange').innerText = "無法估算";
+
                 } else {
-                    const pe = parseFloat(data.pe);
-                    const epsNum = parseFloat(data.eps);
-                    document.getElementById('resPe').innerText = pe + " 倍";
+                    // 正常獲利狀態 (台積電、全新等)
+                    const pe = data.pe;
+                    document.getElementById('resEps').innerText = data.eps + " 元";
+                    document.getElementById('resEps').className = "val-blue";
+                    document.getElementById('resPe').innerText = pe.toFixed(2) + " 倍";
+                    
                     document.getElementById('healthScore').innerText = (pe < 15) ? "優 (🌟🌟🌟🌟🌟)" : (pe <= 25 ? "良 (🌟🌟🌟🌟)" : "普 (🌟🌟🌟)");
                     document.getElementById('resGross').innerText = "請參閱最新季報";
                     document.getElementById('resDebt').innerText = "請參閱最新季報";
-                    document.getElementById('resHighlight').innerText = `目前本益比為 ${pe} 倍，請留意近期營收與毛利變化。`;
+                    document.getElementById('resHighlight').innerText = `目前本益比為 ${pe.toFixed(2)} 倍，請留意近期營收與毛利變化。`;
                     document.getElementById('adviceText').innerText = pe > 25 ? " 屬高本益比股票，反映市場高度期待。進場務必嚴守止損。" : " 估值合理，體質相對穩健。";
-                    document.getElementById('buyRange').innerText = `${Math.floor(epsNum * 12)} ~ ${Math.floor(epsNum * 15)} 元`;
-                    document.getElementById('sellRange').innerText = `${Math.floor(epsNum * 22)} 元以上`;
+                    
+                    document.getElementById('buyRange').innerText = `${Math.floor(epsVal * 12)} ~ ${Math.floor(epsVal * 15)} 元`;
+                    document.getElementById('sellRange').innerText = `${Math.floor(epsVal * 22)} 元以上`;
                 }
 
                 document.getElementById('report').style.display = 'grid';
