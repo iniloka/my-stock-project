@@ -1,166 +1,54 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股智能投資分析 Pro</title>
-    <style>
-        :root { --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --warning: #f59e0b; --bg: #f8fafc; }
-        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: #1e293b; max-width: 1100px; margin: 0 auto; padding: 20px; }
-        .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 24px; border: 1px solid #e2e8f0; }
-        .search-section { text-align: center; margin: 40px 0; }
-        input { padding: 14px; width: 250px; border: 2px solid #cbd5e1; border-radius: 12px; font-size: 18px; outline: none; }
-        button { padding: 14px 30px; background: var(--primary); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #1d4ed8; }
+// netlify/functions/stockInfo.js
+let cache = { data: null, timestamp: 0 };
+const CACHE_DURATION = 1000 * 60 * 30; // 縮短為 30 分鐘更新一次
+
+exports.handler = async function(event, context) {
+    const stockId = event.queryStringParameters.id;
+    if (!stockId) return createResponse(400, { error: '請提供代號' });
+
+    try {
+        // 1. 抓取多個 API：收盤價、基本面、三大法人買賣超
+        const priceUrl = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_AVG_ALL';
+        const infoUrl = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL';
+        const institutionalUrl = 'https://openapi.twse.com.tw/v1/fund/T86_ALL'; // 三大法人
+
+        const [resP, resI, resT] = await Promise.all([fetch(priceUrl), fetch(infoUrl), fetch(institutionalUrl)]);
+        const allPrices = await resP.json();
+        const allInfos = await resI.json();
+        const allTrusts = await resT.json();
+
+        const pData = allPrices.find(s => s.Code === stockId);
+        const iData = allInfos.find(s => s.Code === stockId);
+        const tData = allTrusts.find(s => s.Code === stockId);
+
+        if (!pData || !iData) return createResponse(404, { error: '找不到資料，請確認是否為上市股票' });
+
+        const price = parseFloat(pData.ClosingPrice.replace(/,/g, ''));
+        const pe = parseFloat(iData.PEratio);
         
-        /* 佈局 */
-        .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
-        #tv-chart { height: 500px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-        
-        /* 策略卡片 */
-        .price-container { display: flex; gap: 15px; margin-top: 15px; }
-        .price-box { flex: 1; text-align: center; padding: 15px; border-radius: 12px; border: 2px solid #e2e8f0; }
-        .buy { background: #f0fdf4; border-color: var(--success); color: #166534; }
-        .stop { background: #fef2f2; border-color: var(--danger); color: #991b1b; }
-        
-        /* 健康度診斷 */
-        .health-tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; margin-bottom: 10px; }
-        .tag-good { background: #dcfce7; color: #166534; }
-        .tag-warn { background: #fef9c3; color: #854d0e; }
-        
-        /* 數據列表 */
-        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
-        .helper-box { font-size: 13px; color: #64748b; background: #f1f5f9; padding: 12px; border-radius: 10px; margin-top: 6px; line-height: 1.5; border-left: 4px solid #cbd5e1; }
-        .highlight { font-weight: bold; color: var(--primary); }
-        .loading { display: none; color: var(--primary); font-weight: bold; margin: 10px 0; }
-        
-        @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
-    </style>
-</head>
-<body>
+        // 估算 EPS (股價 / 本益比)
+        const estEps = pe > 0 ? (price / pe).toFixed(2) : "N/A";
 
-    <div class="search-section">
-        <h1>🚀 台股智能分析與健康診斷</h1>
-        <p>自動掃描基本面數據，並提供實際進出場價位建議</p>
-        <input type="text" id="sid" placeholder="輸入股票代號 (如: 2455)">
-        <button onclick="runAnalysis()">開始診斷</button>
-        <div id="loader" class="loading">📡 正在連線證交所數據庫...</div>
-    </div>
+        return createResponse(200, {
+            id: stockId,
+            name: iData.Name,
+            price: price,
+            eps: estEps,
+            pe: pe,
+            yield: iData.DividendYield,
+            pb: iData.PBratio,
+            // 法人數據 (張數)
+            foreign: tData ? tData.ForeignDealersBuySell : "0",
+            trust: tData ? tData.InvestmentTrustBuySell : "0",
+            dealer: tData ? tData.ProprietaryDealersBuySell : "0",
+            suggestedBuy: (price * 0.96).toFixed(1),
+            suggestedStop: (price * 0.90).toFixed(1)
+        });
+    } catch (e) {
+        return createResponse(500, { error: 'API 連線失敗' });
+    }
+};
 
-    <div id="report" style="display:none;">
-        <div class="card">
-            <h3 id="title">📈 技術走勢圖</h3>
-            <div id="tv-chart"></div>
-            <p style="font-size: 12px; color: #94a3b8; margin-top: 10px;">* 若圖表未出現，請點擊圖表左上角代號手動切換上市(TWSE)或上櫃(OTC)。</p>
-        </div>
-
-        <div class="grid">
-            <div class="card">
-                <h3>⚖️ 操作策略與健康診斷</h3>
-                <div id="healthStatus" class="health-tag">分析中...</div>
-                <div class="price-container">
-                    <div class="price-box buy"><span>建議進場點</span><br><b id="buyP" style="font-size: 24px;">-</b></div>
-                    <div class="price-box stop"><span>關鍵止損點</span><br><b id="stopP" style="font-size: 24px;">-</b></div>
-                </div>
-                <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
-                    <b>💡 診斷結論：</b><br>
-                    <span id="adviceText">-</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>🔍 基本面數據解讀</h3>
-                
-                <div class="stat-row"><span>本益比 (PE)</span><b id="resPe">-</b></div>
-                <div class="helper-box">
-                    🧠 <b>如何分析？</b><br>
-                    • <span class="highlight">PE < 15：</span> 體質通常很便宜（撿便宜）。<br>
-                    • <span class="highlight">PE > 25：</span> 市場期待很高（目前有點貴）。
-                </div>
-
-                <div class="stat-row"><span>現金殖利率</span><b id="resYield">-</b></div>
-                <div class="helper-box">
-                    💰 <b>如何分析？</b><br>
-                    • <span class="highlight">殖利率 > 5%：</span> 配息大方，非常適合穩定存股。
-                </div>
-
-                <div class="stat-row"><span>股價淨值比 (PB)</span><b id="resPb">-</b></div>
-                <div class="helper-box">
-                    🏛️ <b>如何分析？</b><br>
-                    • <span class="highlight">PB < 1：</span> 股價比公司清算價值還低，極具安全邊際。
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-        async function runAnalysis() {
-            const id = document.getElementById('sid').value.trim();
-            if(!id) return alert("請輸入代號");
-            
-            document.getElementById('loader').style.display = 'block';
-            document.getElementById('report').style.display = 'none';
-
-            try {
-                const res = await fetch(`/.netlify/functions/stockInfo?id=${id}`);
-                const data = await res.json();
-                if(data.error) throw new Error(data.error);
-
-                document.getElementById('report').style.display = 'block';
-                document.getElementById('title').innerText = `📈 ${data.id} ${data.name} 深度診斷報告`;
-                
-                // 填充數據
-                const pe = parseFloat(data.pe);
-                const yields = parseFloat(data.yield);
-                document.getElementById('resPe').innerText = pe + " 倍";
-                document.getElementById('resYield').innerText = yields + "%";
-                document.getElementById('resPb').innerText = data.pb;
-                document.getElementById('buyP').innerText = data.suggestedBuy + " 元";
-                document.getElementById('stopP').innerText = data.suggestedStop + " 元";
-
-                // 健康度邏輯判斷
-                let healthTag = document.getElementById('healthStatus');
-                let advice = `目前 ${data.name} 的股價為 ${data.price} 元。`;
-
-                if (pe < 15) {
-                    healthTag.innerText = "❤️ 體質：價值低估 (便宜)";
-                    healthTag.className = "health-tag tag-good";
-                    advice += " 目前本益比低於 15 倍，具備優良的撿便宜機會。";
-                } else if (pe > 25) {
-                    healthTag.innerText = "⚠️ 體質：市場過熱 (偏貴)";
-                    healthTag.className = "health-tag tag-warn";
-                    advice += " 目前本益比高於 25 倍，市場期待已滿，進場需謹慎防拉回。";
-                } else {
-                    healthTag.innerText = "⚖️ 體質：估值合理";
-                    healthTag.className = "health-tag tag-good";
-                    advice += " 目前價格處於合理區間。";
-                }
-
-                if (yields >= 5) advice += " 加上殖利率超過 5%，是一檔不錯的存股標的。";
-
-                document.getElementById('adviceText').innerText = advice;
-
-                // 渲染 K線圖
-                new TradingView.widget({
-                    "container_id": "tv-chart",
-                    "autosize": true,
-                    "symbol": `TWSE:${id}`,
-                    "interval": "D",
-                    "timezone": "Asia/Taipei",
-                    "theme": "light",
-                    "style": "1",
-                    "locale": "zh_TW",
-                    "toolbar_bg": "#f1f3f6",
-                    "enable_publishing": false,
-                    "allow_symbol_change": true,
-                    "details": true,
-                    "hotlist": true
-                });
-
-            } catch (err) { alert("連線失敗：" + err.message); }
-            finally { document.getElementById('loader').style.display = 'none'; }
-        }
-    </script>
-</body>
-</html>
+function createResponse(code, body) {
+    return { statusCode: code, headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
