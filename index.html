@@ -3,44 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股智能全方位分析系統</title>
+    <title>台股智能分析系統</title>
     <style>
-        :root { --primary: #2c3e50; --success: #27ae60; --danger: #e74c3c; --bg: #f4f7f6; }
-        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: #333; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        :root { --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --bg: #f8fafc; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: #1e293b; max-width: 1000px; margin: 0 auto; padding: 20px; line-height: 1.6; }
         
-        .search-box { text-align: center; margin: 40px 0 30px 0; }
-        .search-box h1 { color: var(--primary); margin-bottom: 5px; }
-        .search-box p { color: #7f8c8d; margin-top: 0; margin-bottom: 20px; }
-        input { padding: 12px 15px; width: 280px; border: 2px solid #ccc; border-radius: 8px; font-size: 16px; outline: none; }
-        input:focus { border-color: #3498db; }
-        button { padding: 12px 25px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; margin-left: 10px; }
-        button:hover { background: #2980b9; }
+        .search-box { text-align: center; margin: 40px 0; }
+        .search-box h1 { font-size: 28px; color: #0f172a; margin-bottom: 5px; }
+        .search-box p { color: #64748b; margin-bottom: 25px; }
+        input { padding: 14px; width: 280px; border: 2px solid #cbd5e1; border-radius: 12px; font-size: 18px; outline: none; }
+        button { padding: 14px 30px; background: var(--primary); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 16px; margin-left: 10px; }
+        button:hover { background: #1d4ed8; }
 
-        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #eaeaea; }
-        .card h3 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #ecf0f1; padding-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .card { background: white; border-radius: 16px; padding: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; border: 1px solid #e2e8f0; }
+        .card h3 { margin-top: 0; color: #0f172a; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; }
         
-        .data-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; }
-        .data-label { font-weight: bold; color: #7f8c8d; font-size: 16px; }
-        .data-value { font-size: 18px; font-weight: 600; color: var(--primary); }
+        .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 25px; }
         
-        .highlight-green { color: var(--success); font-weight: bold; font-size: 18px; }
-        .highlight-red { color: var(--danger); font-weight: bold; font-size: 18px; }
-        .score-good { color: var(--primary); font-weight: bold; font-size: 18px; }
-        
-        .note { font-size: 13px; color: #95a5a6; margin-top: 15px; }
-        .highlight-box { margin-top: 10px; font-size: 16px; color: #2c3e50; line-height: 1.5; }
-        .loading { display: none; color: #3498db; font-weight: bold; text-align: center; margin-top: 10px; }
+        /* 標籤與法人 */
+        .tag { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 13px; margin-right: 5px; margin-bottom: 10px; font-weight: bold; background: #e0f2fe; color: #0369a1; }
+        .trust-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .trust-box { text-align: center; padding: 12px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 15px; }
+        .plus { color: var(--danger); font-weight: bold; }
+        .minus { color: var(--success); font-weight: bold; }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
-        .full-width { grid-column: 1 / -1; }
+        /* 策略價格 */
+        .price-container { display: flex; gap: 15px; }
+        .price-box { flex: 1; text-align: center; padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; }
+        .buy { background: #f0fdf4; border-color: var(--success); color: #166534; }
+        .stop { background: #fef2f2; border-color: var(--danger); color: #991b1b; }
+        .price-val { font-size: 28px; font-weight: 900; display: block; margin-top: 5px; }
+
+        /* 數據列表 */
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+        .helper-box { font-size: 13px; color: #64748b; background: #f8fafc; padding: 10px 15px; border-radius: 8px; margin-top: 4px; border-left: 3px solid #cbd5e1; }
+        
+        .loading { display: none; color: var(--primary); font-weight: bold; text-align: center; margin-top: 15px; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
     <div class="search-box">
-        <h1>📈 台股價值投資診斷系統</h1>
-        <p>捨棄繁雜線圖，專注於基本面健康度與歷史估值</p>
+        <h1>📊 台股價值診斷系統</h1>
+        <p>自動偵測上市/上櫃數據，整合法人籌碼與進出場策略</p>
         <input type="text" id="sid" placeholder="輸入代號 (如: 2455, 2330)">
         <button onclick="runAnalysis()">開始深度分析</button>
         <div id="loader" class="loading">📡 正在從雲端抓取最新數據...</div>
@@ -48,75 +54,51 @@
 
     <div id="report" style="display:none;" class="grid">
         
-        <div class="card full-width" style="padding: 20px 25px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <span style="font-size: 14px; color: #7f8c8d;">股票名稱</span><br>
-                    <b id="stockName" style="font-size: 24px; color: var(--primary);">-</b>
-                </div>
-                <div style="text-align: right;">
-                    <span style="font-size: 14px; color: #7f8c8d;">目前股價</span><br>
-                    <b id="stockPrice" style="font-size: 24px; color: var(--danger);">-</b>
-                </div>
-            </div>
-        </div>
-
         <div class="card">
-            <h3>🏥 股票健康度評估</h3>
-            <div class="data-row">
-                <span class="data-label">綜合評級：</span>
-                <span id="healthScore" class="score-good">-</span>
+            <h3 id="stockTitle">⚖️ 操盤策略與法人動向</h3>
+            <div id="tagArea"></div>
+            
+            <div class="trust-grid">
+                <div class="trust-box">外資<br><span id="foreign">-</span></div>
+                <div class="trust-box">投信<br><span id="trust">-</span></div>
+                <div class="trust-box">自營商<br><span id="dealer">-</span></div>
             </div>
-            <div class="data-row">
-                <span class="data-label">毛利率：</span>
-                <span id="resGross" class="data-value" style="font-size: 14px; font-weight: normal; color: #95a5a6;">-</span>
+            
+            <div class="price-container">
+                <div class="price-box buy">建議進場點<span class="price-val" id="buyP">-</span></div>
+                <div class="price-box stop">關鍵止損點<span class="price-val" id="stopP">-</span></div>
             </div>
-            <div class="data-row">
-                <span class="data-label">負債比率：</span>
-                <span id="resDebt" class="data-value" style="font-size: 14px; font-weight: normal; color: #95a5a6;">-</span>
-            </div>
-            <div style="margin-top: 15px;">
-                <span class="data-label">近期亮點：</span>
-                <div id="resHighlight" class="highlight-box">-</div>
-            </div>
+            
+            <p style="margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                <b>💡 診斷結論：</b><span id="adviceText">-</span>
+            </p>
         </div>
 
         <div class="card">
             <h3>🔍 核心基本面指標</h3>
-            <div class="data-row">
-                <span class="data-label">預估 EPS：</span>
-                <span id="resEps" class="data-value">-</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">本益比 (PE)：</span>
-                <span id="resPe" class="data-value">-</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">現金殖利率：</span>
-                <span id="resYield" class="data-value">-</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">股價淨值比 (PB)：</span>
-                <span id="resPb" class="data-value">-</span>
-            </div>
-        </div>
+            
+            <div class="stat-row"><span>目前股價</span><b id="resPrice" style="font-size:18px;">-</b></div>
 
-        <div class="card full-width">
-            <h3>🎯 進出場策略建議 (歷史估值法)</h3>
-            <div class="data-row" style="border-bottom: 1px solid #f0f0f0;">
-                <span class="data-label">建議進場區間 (便宜/合理價)：</span>
-                <span id="buyRange" class="highlight-green">-</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">建議賣出區間 (昂貴價)：</span>
-                <span id="sellRange" class="highlight-red">-</span>
-            </div>
-            <div class="note">*註：此區間基於歷史平均本益比推算，非保證獲利之買賣建議。</div>
-        </div>
+            <div class="stat-row"><span>EPS (預估盈餘)</span><b id="resEps" style="color:var(--primary); font-size:20px;">-</b></div>
+            <div class="helper-box">💰 <b>實體獲利：</b>公司每股賺多少錢。數字越大獲利越強。</div>
 
+            <div class="stat-row"><span>本益比 (PE)</span><b id="resPe">-</b></div>
+            <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。高PE通常代表有強大題材。</div>
+
+            <div class="stat-row"><span>現金殖利率</span><b id="resYield">-</b></div>
+            <div class="helper-box">🏦 <b>定存利率：</b>每年配息率。 > 5% 適合存股。</div>
+
+            <div class="stat-row"><span>股價淨值比 (PB)</span><b id="resPb">-</b></div>
+        </div>
     </div>
 
     <script>
+        // 產業題材標籤
+        const themeDB = {
+            "2455": { cate: "電子零組件", tags: ["低軌衛星", "5G 通訊"] },
+            "2330": { cate: "半導體代工", tags: ["AI 核心", "先進製程"] }
+        };
+
         async function runAnalysis() {
             const id = document.getElementById('sid').value.trim();
             if(!id) return alert("請輸入股票代號！");
@@ -131,34 +113,41 @@
                 if(data.error) throw new Error(data.error);
 
                 document.getElementById('report').style.display = 'grid';
+                document.getElementById('stockTitle').innerHTML = `⚖️ ${data.name} (${data.id}) 診斷報告`;
                 
-                // 填入基礎資訊
-                document.getElementById('stockName').innerText = `${data.id} ${data.name}`;
-                document.getElementById('stockPrice').innerText = data.price + " 元";
-                
-                // 填入核心指標
+                // 填充數據
+                document.getElementById('resPrice').innerText = data.price + " 元";
                 document.getElementById('resEps').innerText = data.eps + " 元";
                 document.getElementById('resPe').innerText = data.pe + " 倍";
-                document.getElementById('resYield').innerText = data.yield + " %";
+                document.getElementById('resYield').innerText = data.yield + "%";
                 document.getElementById('resPb').innerText = data.pb;
+                document.getElementById('buyP').innerText = data.suggestedBuy + " 元";
+                document.getElementById('stopP').innerText = data.suggestedStop + " 元";
 
-                // 填入健康度 (截圖還原區)
-                let peNum = parseFloat(data.pe);
-                let score = "普 (🌟🌟🌟)";
-                if (peNum > 0 && peNum < 15) score = "優 (🌟🌟🌟🌟🌟)";
-                else if (peNum >= 15 && peNum <= 25) score = "良 (🌟🌟🌟🌟)";
-                
-                document.getElementById('healthScore').innerText = score;
-                document.getElementById('resGross').innerText = data.grossMargin; // 佔位字
-                document.getElementById('resDebt').innerText = data.debtRatio;    // 佔位字
-                document.getElementById('resHighlight').innerText = data.highlight;
+                // 標籤
+                const info = themeDB[id] || { cate: "一般產業", tags: [] };
+                let tags = `<span class="tag">🏭 ${info.cate}</span>`;
+                info.tags.forEach(t => tags += `<span class="tag">🔥 ${t}</span>`);
+                document.getElementById('tagArea').innerHTML = tags;
 
-                // 填入進出場區間 (截圖還原區)
-                document.getElementById('buyRange').innerText = data.buyRange;
-                document.getElementById('sellRange').innerText = data.sellRange;
+                // 處理法人防呆 (避免 undefined 報錯)
+                const updateTrust = (elId, val) => {
+                    const el = document.getElementById(elId);
+                    if (!val || val === "0") { el.innerText = "-"; el.className = ""; return; }
+                    const num = parseInt(val.toString().replace(/,/g, ''));
+                    el.innerText = (num > 0 ? "+" : "") + val;
+                    el.className = num > 0 ? "plus" : "minus";
+                };
+                updateTrust('foreign', data.foreign);
+                updateTrust('trust', data.trust);
+                updateTrust('dealer', data.dealer);
+
+                // 結論
+                document.getElementById('adviceText').innerText = parseFloat(data.pe) > 25 ? 
+                    " 屬高本益比股票，反映市場期待。進場務必嚴守止損點。" : " 估值合理，體質穩健。";
 
             } catch (err) {
-                alert("錯誤：" + err.message);
+                alert("伺服器連線失敗或找不到該代號：" + err.message);
                 console.error(err);
             } finally {
                 loader.style.display = 'none';
