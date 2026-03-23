@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股全能價值投資儀表板 (Vercel 版)</title>
+    <title>台股全能價值投資儀表板 (國際數據版)</title>
     <style>
         :root { --primary: #1e293b; --blue: #3b82f6; --green: #16a34a; --red: #dc2626; --bg: #f8fafc; }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--primary); max-width: 1100px; margin: 0 auto; padding: 20px; line-height: 1.6; }
@@ -43,10 +43,10 @@
 <body>
 
     <div class="search-box">
-        <h2 style="color: var(--primary);">台股全能價值投資儀表板</h2>
+        <h2 style="color: var(--primary);">台股全能價值投資儀表板 <span style="font-size:14px; color:#64748b;">(Yahoo國際財報源)</span></h2>
         <input type="text" id="sid" placeholder="支援代號或名稱 (如: 0050, M31, 2330)">
         <button onclick="runAnalysis()">開始分析</button>
-        <div id="loader" class="loading">📡 Vercel 伺服器分析中...</div>
+        <div id="loader" class="loading">📡 從國際資料庫調閱真實財報中...</div>
     </div>
 
     <div id="report" style="display:none;" class="grid">
@@ -82,12 +82,12 @@
 
         <div>
             <div class="card" style="margin-bottom: 25px;">
-                <h3>🔍 核心基本面指標</h3>
+                <h3>🔍 核心基本面指標 (真實數據)</h3>
                 <div class="data-row"><span>目前股價</span><b id="resPrice" style="font-size:20px;">-</b></div>
-                <div class="data-row"><span>EPS (預估盈餘)</span><b id="resEps" class="val-blue">-</b></div>
-                <div class="helper-box">💰 <b>實體獲利：</b>公司每股賺多少錢。</div>
+                <div class="data-row"><span>近四季 EPS</span><b id="resEps" class="val-blue">-</b></div>
+                <div class="helper-box">💰 <b>實體獲利：</b>若為負數代表公司正在虧損燒錢中。</div>
                 <div class="data-row"><span>本益比 (PE)</span><b id="resPe" class="data-value">-</b></div>
-                <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。高PE通常代表有強大題材。</div>
+                <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。虧損公司無此數值。</div>
                 <div class="data-row"><span>現金殖利率</span><b id="resYield" class="data-value">-</b></div>
                 <div class="helper-box">🏦 <b>定存利率：</b>每年配息率。 > 5% 適合存股。</div>
                 <div class="data-row" style="border:none;"><span>股價淨值比 (PB)</span><b id="resPb" class="data-value">-</b></div>
@@ -98,7 +98,7 @@
                 <h3>🎯 進出場策略建議 (歷史估值法)</h3>
                 <div class="data-row"><span class="data-label">建議進場區間：</span><span id="buyRange" class="val-green">-</span></div>
                 <div class="data-row" style="border:none;"><span class="data-label">建議賣出區間：</span><span id="sellRange" class="val-red">-</span></div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 10px;">*註：此區間基於歷史平均本益比推算，非保證獲利之買賣建議。</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 10px;">*註：此區間基於歷史平均本益比推算，若 EPS 為負數則無法推算。</div>
             </div>
         </div>
     </div>
@@ -107,7 +107,7 @@
         const themeDB = {
             "2455": { cate: "電子零組件", tags: ["低軌衛星", "5G 通訊"] },
             "2330": { cate: "半導體代工", tags: ["AI 核心", "先進製程", "護國神山"] },
-            "6643": { cate: "半導體矽智財", tags: ["IP 授權", "高成長"] }
+            "6643": { cate: "半導體矽智財", tags: ["IP 授權", "高成長", "高風險"] }
         };
 
         async function runAnalysis() {
@@ -119,7 +119,7 @@
             document.getElementById('report').style.display = 'none';
 
             try {
-                // 呼叫 Vercel 的後端 API
+                // 呼叫我們升級後的 Vercel Yahoo 財報後端
                 const res = await fetch(`/api/stockInfo?id=${encodeURIComponent(query)}`);
                 const data = await res.json();
                 if(data.error) throw new Error(data.error);
@@ -138,10 +138,12 @@
                 document.getElementById('resPb').innerText = data.pb !== "-" ? data.pb : "-";
                 document.getElementById('buyP').innerText = data.suggestedBuy + " 元";
                 document.getElementById('stopP').innerText = data.suggestedStop + " 元";
+                
+                // EPS 不再是推算的了，是真實抓到的！
+                document.getElementById('resEps').innerText = data.eps !== "N/A" ? data.eps + " 元" : "N/A";
 
-                // 分流邏輯：ETF vs 無本益比(M31) vs 正常股票
+                // 分流邏輯：ETF vs 虧損股(無PE) vs 正常股票
                 if (data.isETF) {
-                    document.getElementById('resEps').innerText = "ETF 無此數據";
                     document.getElementById('resPe').innerText = "ETF 無本益比";
                     document.getElementById('healthScore').innerText = "被動投資 (🌟🌟🌟🌟)";
                     document.getElementById('resGross').innerText = "N/A";
@@ -152,20 +154,19 @@
                     document.getElementById('sellRange').innerText = "依技術面壓力推算";
 
                 } else if (!data.hasPE) {
-                    document.getElementById('resEps').innerText = "官方無數據 / 虧損";
-                    document.getElementById('resPe').innerText = "無效 / 負值";
+                    // 若公司虧損，EPS會顯示負數，PE則無法顯示
+                    document.getElementById('resPe').innerText = "無效 / 負數";
                     document.getElementById('healthScore').innerText = "風險偏高 (⚠️)";
                     document.getElementById('resGross').innerText = "請參閱最新季報";
                     document.getElementById('resDebt').innerText = "請參閱最新季報";
-                    document.getElementById('resHighlight').innerText = "官方未提供有效本益比，可能因近期虧損或數值異常。";
-                    document.getElementById('adviceText').innerText = " 獲利能力不穩定，操作此類股票務必嚴格設定止損點。";
-                    document.getElementById('buyRange').innerText = "無法估算";
+                    document.getElementById('resHighlight').innerText = `注意！此公司目前 EPS 為 ${data.eps}，呈現虧損狀態，無法計算本益比。`;
+                    document.getElementById('adviceText').innerText = " 公司目前未獲利，股價多由題材與本夢比支撐，操作務必極度嚴格執行止損。";
+                    document.getElementById('buyRange').innerText = "無法估算 (無獲利基礎)";
                     document.getElementById('sellRange').innerText = "無法估算";
 
                 } else {
-                    const pe = data.pe;
-                    const epsNum = data.price / pe;
-                    document.getElementById('resEps').innerText = epsNum.toFixed(2) + " 元";
+                    const pe = parseFloat(data.pe);
+                    const epsNum = parseFloat(data.eps);
                     document.getElementById('resPe').innerText = pe + " 倍";
                     document.getElementById('healthScore').innerText = (pe < 15) ? "優 (🌟🌟🌟🌟🌟)" : (pe <= 25 ? "良 (🌟🌟🌟🌟)" : "普 (🌟🌟🌟)");
                     document.getElementById('resGross').innerText = "請參閱最新季報";
