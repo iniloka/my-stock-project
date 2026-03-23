@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股全能價值投資儀表板</title>
+    <title>台股全能價值投資儀表板 (Vercel 版)</title>
     <style>
         :root { --primary: #1e293b; --blue: #3b82f6; --green: #16a34a; --red: #dc2626; --bg: #f8fafc; }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: var(--primary); max-width: 1100px; margin: 0 auto; padding: 20px; line-height: 1.6; }
         
         .search-box { text-align: center; margin: 30px 0; }
-        input { padding: 12px 15px; width: 280px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 16px; outline: none; }
+        input { padding: 12px 15px; width: 300px; border: 2px solid #cbd5e1; border-radius: 8px; font-size: 16px; outline: none; }
         button { padding: 12px 25px; background: var(--blue); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; margin-left: 10px; }
         
         .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 25px; }
         .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
-        .card h3 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+        .card h3 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; font-size: 18px; }
         
         .tag { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 13px; margin-right: 5px; margin-bottom: 10px; font-weight: bold; background: #e0f2fe; color: #0369a1; }
         .trust-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
@@ -44,9 +44,9 @@
 
     <div class="search-box">
         <h2 style="color: var(--primary);">台股全能價值投資儀表板</h2>
-        <input type="text" id="sid" placeholder="輸入代號 (如: 2455, 2330)">
+        <input type="text" id="sid" placeholder="支援代號或名稱 (如: 0050, M31, 2330)">
         <button onclick="runAnalysis()">開始分析</button>
-        <div id="loader" class="loading">數據讀取中...</div>
+        <div id="loader" class="loading">📡 Vercel 伺服器分析中...</div>
     </div>
 
     <div id="report" style="display:none;" class="grid">
@@ -85,7 +85,7 @@
                 <h3>🔍 核心基本面指標</h3>
                 <div class="data-row"><span>目前股價</span><b id="resPrice" style="font-size:20px;">-</b></div>
                 <div class="data-row"><span>EPS (預估盈餘)</span><b id="resEps" class="val-blue">-</b></div>
-                <div class="helper-box">💰 <b>實體獲利：</b>公司每股賺多少錢。數字越大獲利越強。</div>
+                <div class="helper-box">💰 <b>實體獲利：</b>公司每股賺多少錢。</div>
                 <div class="data-row"><span>本益比 (PE)</span><b id="resPe" class="data-value">-</b></div>
                 <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。高PE通常代表有強大題材。</div>
                 <div class="data-row"><span>現金殖利率</span><b id="resYield" class="data-value">-</b></div>
@@ -96,8 +96,8 @@
 
             <div class="card">
                 <h3>🎯 進出場策略建議 (歷史估值法)</h3>
-                <div class="data-row"><span class="data-label">建議進場區間 (便宜/合理價)：</span><span id="buyRange" class="val-green">-</span></div>
-                <div class="data-row" style="border:none;"><span class="data-label">建議賣出區間 (昂貴價)：</span><span id="sellRange" class="val-red">-</span></div>
+                <div class="data-row"><span class="data-label">建議進場區間：</span><span id="buyRange" class="val-green">-</span></div>
+                <div class="data-row" style="border:none;"><span class="data-label">建議賣出區間：</span><span id="sellRange" class="val-red">-</span></div>
                 <div style="font-size: 12px; color: #94a3b8; margin-top: 10px;">*註：此區間基於歷史平均本益比推算，非保證獲利之買賣建議。</div>
             </div>
         </div>
@@ -105,50 +105,82 @@
 
     <script>
         const themeDB = {
-            "2455": { cate: "電子零組件", tags: ["低軌衛星", "5G 通訊", "化合物半導體"] },
-            "2330": { cate: "半導體代工", tags: ["AI 核心", "先進製程", "全球龍頭"] }
+            "2455": { cate: "電子零組件", tags: ["低軌衛星", "5G 通訊"] },
+            "2330": { cate: "半導體代工", tags: ["AI 核心", "先進製程", "護國神山"] },
+            "6643": { cate: "半導體矽智財", tags: ["IP 授權", "高成長"] }
         };
 
         async function runAnalysis() {
-            const id = document.getElementById('sid').value.trim();
-            if(!id) return alert("請輸入股票代號！");
+            const query = document.getElementById('sid').value.trim();
+            if(!query) return alert("請輸入股票代號或名稱！");
             
             const loader = document.getElementById('loader');
             loader.style.display = 'block';
             document.getElementById('report').style.display = 'none';
 
             try {
-                // 這裡改成了 Vercel 的專屬路徑！
-                const res = await fetch(`/api/stockInfo?id=${id}`);
+                // 呼叫 Vercel 的後端 API
+                const res = await fetch(`/api/stockInfo?id=${encodeURIComponent(query)}`);
                 const data = await res.json();
                 if(data.error) throw new Error(data.error);
 
-                document.getElementById('report').style.display = 'grid';
-                
                 document.getElementById('stockTitle').innerText = `⚖️ ${data.name} (${data.id}) 診斷報告`;
-                const info = themeDB[id] || { cate: "上市/櫃公司", tags: [] };
+                
+                // 標籤系統
+                const info = themeDB[data.id] || { cate: data.isETF ? "ETF 指數基金" : "上市/櫃公司", tags: [] };
                 let tags = `<span class="tag">🏭 ${info.cate}</span>`;
                 info.tags.forEach(t => tags += `<span class="tag">🔥 ${t}</span>`);
                 document.getElementById('tagArea').innerHTML = tags;
 
+                // 填寫共用數據
+                document.getElementById('resPrice').innerText = data.price + " 元";
+                document.getElementById('resYield').innerText = data.yield !== "-" ? data.yield + "%" : "-";
+                document.getElementById('resPb').innerText = data.pb !== "-" ? data.pb : "-";
                 document.getElementById('buyP').innerText = data.suggestedBuy + " 元";
                 document.getElementById('stopP').innerText = data.suggestedStop + " 元";
-                document.getElementById('healthScore').innerText = data.score;
-                document.getElementById('resGross').innerText = data.grossMargin;
-                document.getElementById('resDebt').innerText = data.debtRatio;
-                document.getElementById('resHighlight').innerText = data.highlight;
-                document.getElementById('adviceText').innerText = parseFloat(data.pe) > 25 ? " 屬高本益比股票，反映市場期待。進場務必嚴守止損點。" : " 估值合理，體質穩健。";
 
-                document.getElementById('resPrice').innerText = data.price + " 元";
-                document.getElementById('resEps').innerText = data.eps + " 元";
-                document.getElementById('resPe').innerText = data.pe + " 倍";
-                document.getElementById('resYield').innerText = data.yield + "%";
-                document.getElementById('resPb').innerText = data.pb;
-                document.getElementById('buyRange').innerText = data.buyRange;
-                document.getElementById('sellRange').innerText = data.sellRange;
+                // 分流邏輯：ETF vs 無本益比(M31) vs 正常股票
+                if (data.isETF) {
+                    document.getElementById('resEps').innerText = "ETF 無此數據";
+                    document.getElementById('resPe').innerText = "ETF 無本益比";
+                    document.getElementById('healthScore').innerText = "被動投資 (🌟🌟🌟🌟)";
+                    document.getElementById('resGross').innerText = "N/A";
+                    document.getElementById('resDebt').innerText = "N/A";
+                    document.getElementById('resHighlight').innerText = "ETF 屬於一籃子股票，請關注其追蹤指數之趨勢。";
+                    document.getElementById('adviceText').innerText = " 建議以「定期定額」或「逢低買進」策略為主。";
+                    document.getElementById('buyRange').innerText = "依技術面支撐推算";
+                    document.getElementById('sellRange').innerText = "依技術面壓力推算";
+
+                } else if (!data.hasPE) {
+                    document.getElementById('resEps').innerText = "官方無數據 / 虧損";
+                    document.getElementById('resPe').innerText = "無效 / 負值";
+                    document.getElementById('healthScore').innerText = "風險偏高 (⚠️)";
+                    document.getElementById('resGross').innerText = "請參閱最新季報";
+                    document.getElementById('resDebt').innerText = "請參閱最新季報";
+                    document.getElementById('resHighlight').innerText = "官方未提供有效本益比，可能因近期虧損或數值異常。";
+                    document.getElementById('adviceText').innerText = " 獲利能力不穩定，操作此類股票務必嚴格設定止損點。";
+                    document.getElementById('buyRange').innerText = "無法估算";
+                    document.getElementById('sellRange').innerText = "無法估算";
+
+                } else {
+                    const pe = data.pe;
+                    const epsNum = data.price / pe;
+                    document.getElementById('resEps').innerText = epsNum.toFixed(2) + " 元";
+                    document.getElementById('resPe').innerText = pe + " 倍";
+                    document.getElementById('healthScore').innerText = (pe < 15) ? "優 (🌟🌟🌟🌟🌟)" : (pe <= 25 ? "良 (🌟🌟🌟🌟)" : "普 (🌟🌟🌟)");
+                    document.getElementById('resGross').innerText = "請參閱最新季報";
+                    document.getElementById('resDebt').innerText = "請參閱最新季報";
+                    document.getElementById('resHighlight').innerText = `目前本益比為 ${pe} 倍，請留意近期營收與毛利變化。`;
+                    document.getElementById('adviceText').innerText = pe > 25 ? " 屬高本益比股票，反映市場高度期待。進場務必嚴守止損。" : " 估值合理，體質相對穩健。";
+                    document.getElementById('buyRange').innerText = `${Math.floor(epsNum * 12)} ~ ${Math.floor(epsNum * 15)} 元`;
+                    document.getElementById('sellRange').innerText = `${Math.floor(epsNum * 22)} 元以上`;
+                }
+
+                document.getElementById('report').style.display = 'grid';
 
             } catch (err) {
                 alert("錯誤：" + err.message);
+                console.error(err);
             } finally {
                 loader.style.display = 'none';
             }
