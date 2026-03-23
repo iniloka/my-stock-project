@@ -1,3 +1,4 @@
+// netlify/functions/stockInfo.js
 let cache = { data: null, timestamp: 0 };
 const CACHE_DURATION = 1000 * 60 * 30; // 30分鐘快取
 
@@ -8,7 +9,6 @@ export const handler = async (event) => {
     const now = Date.now();
     try {
         let results;
-
         if (cache.data && (now - cache.timestamp < CACHE_DURATION)) {
             results = cache.data;
         } else {
@@ -45,32 +45,26 @@ export const handler = async (event) => {
             }
         }
 
-        if (!finalData.name) return createResponse(404, { error: '找不到該股票 (上市/上櫃皆無此代號)' });
+        if (!finalData.name) return createResponse(404, { error: '找不到該股票代號' });
 
-        // 計算 EPS 與進出場區間 (歷史估值法模擬)
+        // 計算 EPS 與 具體進出場點位
         const pe = parseFloat(finalData.pe) || 0;
-        let epsNum = 0;
-        finalData.eps = "N/A";
-        finalData.buyRange = "需自行評估";
-        finalData.sellRange = "需自行評估";
+        finalData.eps = pe > 0 ? (finalData.price / pe).toFixed(2) : "N/A";
+        
+        // 具體數字建議：進場抓跌 5% 支撐，止損抓跌 12%
+        finalData.suggestedBuy = (finalData.price * 0.95).toFixed(2);
+        finalData.suggestedStop = (finalData.price * 0.88).toFixed(2);
 
-        if (pe > 0) {
-            epsNum = finalData.price / pe;
-            finalData.eps = epsNum.toFixed(2);
-            // 模擬歷史估值法：便宜價約 12-15 倍 PE，昂貴價約 22 倍 PE 以上
-            finalData.buyRange = `${Math.floor(epsNum * 12)} ~ ${Math.floor(epsNum * 15)} 元`;
-            finalData.sellRange = `${Math.floor(epsNum * 22)} 元以上`;
-        }
-
-        // 模擬財報數據版位 (因免費 API 無此資料，先以文字或預設值佔位)
-        finalData.grossMargin = "請串接季報API";
-        finalData.debtRatio = "請串接季報API";
-        finalData.highlight = `目前股價 ${finalData.price} 元，市場給予的本益比為 ${finalData.pe} 倍。請持續關注下個月營收表現與法人籌碼動向。`;
+        // 確保法人資料有回傳，避免前端當機
+        finalData.foreign = "0";
+        finalData.trust = "0";
+        finalData.dealer = "0";
 
         return createResponse(200, finalData);
 
     } catch (error) {
-        return createResponse(500, { error: '伺服器執行出錯', msg: error.message });
+        console.error("Backend Error:", error);
+        return createResponse(500, { error: '後端執行出錯' });
     }
 };
 
