@@ -2,65 +2,77 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台股智能分析系統 Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股智能投資指南 Pro</title>
     <style>
-        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background: #f8fafc; color: #1e293b; max-width: 1100px; margin: 0 auto; padding: 20px; }
-        .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 24px; border: 1px solid #e2e8f0; }
-        .search-section { text-align: center; margin-bottom: 40px; }
-        input { padding: 14px 20px; width: 280px; border: 2px solid #cbd5e1; border-radius: 10px; font-size: 18px; outline: none; transition: border 0.3s; }
-        input:focus { border-color: #3b82f6; }
-        button { padding: 14px 28px; background: #2563eb; color: white; border: none; border-radius: 10px; font-size: 18px; cursor: pointer; font-weight: 600; margin-left: 10px; }
+        :root { --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --bg: #f8fafc; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: #1e293b; max-width: 1100px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin-bottom: 24px; border: 1px solid #e2e8f0; }
+        .search-section { text-align: center; margin: 40px 0; }
+        input { padding: 14px 20px; width: 280px; border: 2px solid #cbd5e1; border-radius: 12px; font-size: 18px; outline: none; transition: all 0.3s; }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
+        button { padding: 14px 32px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 18px; cursor: pointer; font-weight: 600; margin-left: 10px; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        #tv-chart { height: 500px; border-radius: 12px; overflow: hidden; }
-        .stat-box { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px f6f8fa solid; }
-        .price-box { text-align: center; padding: 20px; border-radius: 12px; }
-        .buy-zone { background: #f0fdf4; border: 2px solid #22c55e; color: #166534; }
-        .stop-zone { background: #fef2f2; border: 2px solid #ef4444; color: #991b1b; }
-        .price-val { font-size: 32px; font-weight: 800; display: block; margin-top: 10px; }
-        .loading { display: none; color: #64748b; margin-top: 10px; }
+        .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
+        #tv-chart { height: 500px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .price-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .price-box { text-align: center; padding: 15px; border-radius: 12px; border: 2px solid #e2e8f0; }
+        .buy { border-color: var(--success); background: #f0fdf4; color: #166534; }
+        .stop { border-color: var(--danger); background: #fef2f2; color: #991b1b; }
+        .target { border-color: #ca8a04; background: #fefce8; color: #854d0e; }
+        .price-label { font-size: 14px; font-weight: 600; display: block; margin-bottom: 5px; }
+        .price-val { font-size: 24px; font-weight: 800; }
+        .stat-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .loading { display: none; margin-top: 15px; color: var(--primary); font-weight: bold; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
     <div class="search-section">
-        <h1>📊 台股價值與技術分析系統</h1>
+        <h1>🚀 台股價值與技術分析系統</h1>
+        <p>即時串接證交所數據，自動估算支撐與壓力位</p>
         <input type="text" id="sid" placeholder="輸入台股代號 (如: 2330)">
         <button onclick="runAnalysis()">開始診斷</button>
-        <div id="loader" class="loading">正在向證交所調閱資料...</div>
+        <div id="loader" class="loading">📡 正在連線證交所伺服器...</div>
     </div>
 
     <div id="report" style="display:none;">
         <div class="card">
-            <h3>📈 即時技術走勢 (日/週/月)</h3>
+            <h3 id="chartTitle">📈 即時技術走勢</h3>
             <div id="tv-chart"></div>
         </div>
 
         <div class="grid">
             <div class="card">
-                <h3>🔍 財務健康度</h3>
-                <div class="stat-box"><span>股票名稱</span><b id="name">-</b></div>
-                <div class="stat-box"><span>目前本益比</span><b id="pe">-</b></div>
-                <div class="stat-box"><span>現金殖利率</span><b id="yield">-</b></div>
-                <div class="stat-box"><span>股價淨值比</span><b id="pb">-</b></div>
-                <p style="font-size: 13px; color: #64748b; margin-top: 20px;">* 以上為盤後靜態數據，不含即時跳動。</p>
-            </div>
-
-            <div class="card">
-                <h3>⚖️ 策略評估建議</h3>
-                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="price-box buy-zone">
-                        <span>建議進場點</span>
+                <h3>⚖️ 策略評估建議 (實際價位)</h3>
+                <div class="price-container">
+                    <div class="price-box buy">
+                        <span class="price-label">建議進場點</span>
                         <span class="price-val" id="buyPrice">0</span>
                     </div>
-                    <div class="price-box stop-zone">
-                        <span>關鍵止損點</span>
+                    <div class="price-box target">
+                        <span class="price-label">目標停利點</span>
+                        <span class="price-val" id="targetPrice">0</span>
+                    </div>
+                    <div class="price-box stop">
+                        <span class="price-label">關鍵止損點</span>
                         <span class="price-val" id="stopPrice">0</span>
                     </div>
                 </div>
-                <div style="margin-top: 20px; line-height: 1.6;">
-                    <b>專家建議：</b> <span id="adviceText">-</span>
+                <div style="margin-top: 25px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                    <b>💡 專家診斷報告：</b><br>
+                    <span id="adviceText">分析中...</span>
                 </div>
+            </div>
+
+            <div class="card">
+                <h3>🔍 基本面數據</h3>
+                <div class="stat-row"><span>目前股價 (收盤)</span><b id="resPrice">-</b></div>
+                <div class="stat-row"><span>本益比 (PE)</span><b id="resPe">-</b></div>
+                <div class="stat-row"><span>現金殖利率</span><b id="resYield">-</b></div>
+                <div class="stat-row"><span>股價淨值比</span><b id="resPb">-</b></div>
+                <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">* 數據來源：TWSE OpenAPI (每日更新)</p>
             </div>
         </div>
     </div>
@@ -69,53 +81,51 @@
     <script>
         async function runAnalysis() {
             const id = document.getElementById('sid').value.trim();
-            if(!id) return;
+            if(!id) return alert("請輸入股票代號！");
 
-            document.getElementById('loader').style.display = 'block';
+            const loader = document.getElementById('loader');
+            const report = document.getElementById('report');
             
+            loader.style.display = 'block';
+            report.style.display = 'none';
+
             try {
-                // 1. 抓取真實數據
+                // 1. 請求後端 API
                 const res = await fetch(`/.netlify/functions/stockInfo?id=${id}`);
                 const data = await res.json();
                 if(data.error) throw new Error(data.error);
 
-                // 2. 顯示報表
-                document.getElementById('report').style.display = 'block';
-                document.getElementById('name').innerText = data.id + " " + data.name;
-                document.getElementById('pe').innerText = data.pe;
-                document.getElementById('yield').innerText = data.yield + "%";
-                document.getElementById('pb').innerText = data.pb;
+                // 2. 顯示報表與基礎資訊
+                report.style.display = 'block';
+                document.getElementById('chartTitle').innerText = `📈 ${data.id} ${data.name} 技術分析圖`;
+                document.getElementById('resPrice').innerText = data.price + " 元";
+                document.getElementById('resPe').innerText = data.pe;
+                document.getElementById('resYield').innerText = data.yield + "%";
+                document.getElementById('resPb').innerText = data.pb;
 
-                // 3. 計算實際價位 (核心邏輯)
-                // 這裡我們需要一個參考股價，目前後端只回傳PE，我們反推一個約略股價
-                // 假設公式：合理價 = 過去四季EPS * 15倍PE (這裡暫用 PE 換算模擬)
-                // 為了給你「實際價位」，我們先設定一個邏輯：
-                // 這裡的演示假設我們已經有了當前股價 (暫以 PE 推估邏輯)
-                
-                let peVal = parseFloat(data.pe);
-                let buyPoint = "需參考線型";
-                let stopPoint = "跌幅 8%";
+                // 3. 填入後端計算的實際價位 (新增停利點計算)
+                document.getElementById('buyPrice').innerText = data.suggestedBuy;
+                document.getElementById('stopPrice').innerText = data.suggestedStop;
+                // 簡單停利點：進場點 + 15% 獲利空間
+                const targetVal = (parseFloat(data.price) * 1.15).toFixed(2);
+                document.getElementById('targetPrice').innerText = targetVal;
 
-                if (peVal > 0) {
-                    // 假設目前價格是 P，PE = P / EPS -> 我們建議在 PE 15-18 買入
-                    // 這邊提示用戶觀察具體支撐
-                    document.getElementById('buyPrice').innerText = "分批佈局";
-                    document.getElementById('stopPrice').innerText = "-8%~10%";
-                    
-                    if(peVal < 15) {
-                        document.getElementById('adviceText') .innerText = "目前估值極低，具備長期安全邊際，適合分批進場。";
-                    } else if(peVal > 28) {
-                        document.getElementById('adviceText').innerText = "本益比過高，短線過熱，強烈建議等待拉回至季線再考慮。";
-                    } else {
-                        document.getElementById('adviceText').innerText = "目前價格處於合理區間，建議參考技術面均線支撐進場。";
-                    }
+                // 4. 智能分析文本
+                let advice = `針對 ${data.name}，當前 PE 為 ${data.pe}。`;
+                if (parseFloat(data.pe) > 25) {
+                    advice += "目前估值偏高（昂貴區），建議「耐心等待」股價回落至進場價附近再分批布局。若已持有，應嚴格執行止損。";
+                } else if (parseFloat(data.pe) < 15) {
+                    advice += "目前估值處於低檔（便宜區），具備優良的安全邊際。若技術面築底完成，是長線佈局的良機。";
+                } else {
+                    advice += "目前價格處於合理區間。建議參考 K 線圖，在股價回踩月線（20MA）支撐時進場。";
                 }
+                document.getElementById('adviceText').innerText = advice;
 
-                // 4. 渲染 K 線圖 (修正代號)
+                // 5. 渲染 TradingView K線圖
                 new TradingView.widget({
                     "container_id": "tv-chart",
                     "autosize": true,
-                    "symbol": `TWSE:${id}`, // 確保代號正確
+                    "symbol": `TWSE:${id}`,
                     "interval": "D",
                     "timezone": "Asia/Taipei",
                     "theme": "light",
@@ -123,14 +133,18 @@
                     "locale": "zh_TW",
                     "toolbar_bg": "#f1f3f6",
                     "enable_publishing": false,
-                    "hide_legend": false,
-                    "save_image": false
+                    "withdateranges": true,
+                    "hide_side_toolbar": false,
+                    "allow_symbol_change": true,
+                    "details": true,
+                    "hotlist": true,
+                    "calendar": true
                 });
 
             } catch (err) {
                 alert("錯誤：" + err.message);
             } finally {
-                document.getElementById('loader').style.display = 'none';
+                loader.style.display = 'none';
             }
         }
     </script>
