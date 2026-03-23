@@ -1,17 +1,20 @@
 // api/stockInfo.js
 let cache = { data: null, timestamp: 0 };
-const CACHE_DURATION = 1000 * 60 * 30; // 30分鐘快取，省流量
+const CACHE_DURATION = 1000 * 60 * 15; // 15 分鐘快取，減輕伺服器負擔
 
 export default async function handler(req, res) {
-    // 允許跨域連線
+    // 允許前端跨域讀取
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
 
-    // Vercel 抓取代號的語法
-    const stockId = req.query.id;
-    if (!stockId) return res.status(400).json({ error: '請提供股票代號' });
+    const query = req.query.id;
+    if (!query) return res.status(400).json({ error: '請提供股票代號或名稱' });
 
+    const searchQ = query.trim().toUpperCase();
     const now = Date.now();
+
     try {
+        // 1. 同時下載上市與上櫃資料庫
         if (!cache.data || (now - cache.timestamp > CACHE_DURATION)) {
             const [twseInfo, twsePrice, otcInfo, otcPrice] = await Promise.all([
                 fetch('https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL').then(r => r.json()),
@@ -23,70 +26,58 @@ export default async function handler(req, res) {
             cache.timestamp = now;
         }
 
-        const results = cache.data;
-        let finalData = {};
+        const { twseInfo, twsePrice, otcInfo, otcPrice } = cache.data;
+        let finalData = null;
 
-        const tInfo = results.twseInfo.find(s => s.Code === stockId);
-        const tPrice = results.twsePrice.find(s => s.Code === stockId);
-
-        if (tInfo && tPrice) {
+        // 2. 搜尋上市 (支援代號與名稱)
+        const tPriceMatch = twsePrice.find(s => s.Code === searchQ || s.Name.toUpperCase().includes(searchQ));
+        if (tPriceMatch) {
+            const code = tPriceMatch.Code;
+            const tInfoMatch = twseInfo.find(s => s.Code === code);
             finalData = {
-                id: stockId, name: tInfo.Name, 
-                price: parseFloat(tPrice.ClosingPrice.replace(/,/g, '')),
-                pe: parseFloat(tInfo.PEratio) || 0, 
-                yield: tInfo.DividendYield || "0", pb: tInfo.PBratio || "0"
+                id: code, name: tPriceMatch.Name,
+                price: parseFloat(tPriceMatch.ClosingPrice.replace(/,/g, '')),
+                pe: tInfoMatch ? parseFloat(tInfoMatch.PEratio) : NaN,
+                yield: tInfoMatch ? tInfoMatch.DividendYield : "-",
+                pb: tInfoMatch ? tInfoMatch.PBratio : "-"
             };
         } else {
-            const oInfo = results.otcInfo.find(s => s.SecuritiesCompanyCode === stockId);
-            const oPrice = results.otcPrice.find(s => s.Date && s.SecuritiesCompanyCode === stockId);
-            if (oInfo && oPrice) {
+            // 3. 搜尋上櫃 (支援代號與名稱)
+            const oPriceMatch = otcPrice.find(s => s.SecuritiesCompanyCode === searchQ || s.CompanyName.toUpperCase().includes(searchQ));
+            if (oPriceMatch) {
+                const code = oPriceMatch.SecuritiesCompanyCode;
+                const oInfoMatch = otcInfo.find(s => s.SecuritiesCompanyCode === code);
                 finalData = {
-                    id: stockId, name: oInfo.CompanyName, 
-                    price: parseFloat(oPrice.Close),
-                    pe: parseFloat(oInfo.PriceEarningsRatio) || 0, 
-                    yield: oInfo.DividendYield || "0", pb: oInfo.PriceBookRatio || "0"
+                    id: code, name: oPriceMatch.CompanyName,
+                    price: parseFloat(oPriceMatch.Close.replace(/,/g, '')),
+                    pe: oInfoMatch ? parseFloat(oInfoMatch.PriceEarningsRatio) : NaN,
+                    yield: oInfoMatch ? oInfoMatch.DividendYield : "-",
+                    pb: oInfoMatch ? oInfoMatch.PriceBookRatio : "-"
                 };
             }
         }
 
-        if (!finalData.name) return res.status(404).json({ error: '找不到該股票代號' });
+        if (!finalData) return res.status(404).json({ error: '找不到該股票或 ETF' });
 
+        // 4. 計算與狀態判定
+        const price = finalData.price || 0;
         const pe = finalData.pe;
-        const price = finalData.price;
-        finalData.eps = pe > 0 ? (price / pe).toFixed(2) : "N/A";
+        
+        // 判定是否為 ETF (代號 00 開頭，或無本益比且無殖利率)
+        finalData.isETF = finalData.id.startsWith('00') || (isNaN(pe) && finalData.yield === "-");
+        // 判定是否有有效本益比 (排除 M31 虧損時的狀況)
+        finalData.hasPE = !isNaN(pe) && pe > 0;
+
         finalData.suggestedBuy = (price * 0.95).toFixed(2);
         finalData.suggestedStop = (price * 0.88).toFixed(2);
+        
+        // 暫代法人籌碼
         finalData.foreign = "-"; finalData.trust = "-"; finalData.dealer = "-";
 
-        if (stockId === "2330") {
-            finalData.score = "優 (🌟🌟🌟🌟🌟)";
-            finalData.grossMargin = "59.89%";
-            finalData.debtRatio = "38.2%";
-            finalData.highlight = "AI 晶片需求強勁，CoWoS 產能滿載。";
-            finalData.buyRange = "1,450 ~ 1,650 元";
-            finalData.sellRange = "1,980 元以上";
-        } else {
-            if (pe > 0 && pe < 15) finalData.score = "優 (🌟🌟🌟🌟🌟)";
-            else if (pe >= 15 && pe <= 25) finalData.score = "良 (🌟🌟🌟🌟)";
-            else finalData.score = "普 (🌟🌟🌟)";
-
-            finalData.grossMargin = "請參閱最新季報";
-            finalData.debtRatio = "請參閱最新季報";
-            finalData.highlight = `目前本益比約為 ${pe} 倍，請留意近期營收動能。`;
-
-            if (pe > 0) {
-                let epsNum = price / pe;
-                finalData.buyRange = `${Math.floor(epsNum * 12)} ~ ${Math.floor(epsNum * 15)} 元`;
-                finalData.sellRange = `${Math.floor(epsNum * 22)} 元以上`;
-            } else {
-                finalData.buyRange = "無法估算"; finalData.sellRange = "無法估算";
-            }
-        }
-
-        // Vercel 回傳資料的語法
         return res.status(200).json(finalData);
 
     } catch (error) {
-        return res.status(500).json({ error: '伺服器執行出錯' });
+        console.error("Vercel Backend Error:", error);
+        return res.status(500).json({ error: '伺服器向證交所抓取資料失敗' });
     }
 }
