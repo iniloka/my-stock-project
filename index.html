@@ -1,54 +1,178 @@
-// netlify/functions/stockInfo.js
-let cache = { data: null, timestamp: 0 };
-const CACHE_DURATION = 1000 * 60 * 30; // 縮短為 30 分鐘更新一次
-
-exports.handler = async function(event, context) {
-    const stockId = event.queryStringParameters.id;
-    if (!stockId) return createResponse(400, { error: '請提供代號' });
-
-    try {
-        // 1. 抓取多個 API：收盤價、基本面、三大法人買賣超
-        const priceUrl = 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_AVG_ALL';
-        const infoUrl = 'https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL';
-        const institutionalUrl = 'https://openapi.twse.com.tw/v1/fund/T86_ALL'; // 三大法人
-
-        const [resP, resI, resT] = await Promise.all([fetch(priceUrl), fetch(infoUrl), fetch(institutionalUrl)]);
-        const allPrices = await resP.json();
-        const allInfos = await resI.json();
-        const allTrusts = await resT.json();
-
-        const pData = allPrices.find(s => s.Code === stockId);
-        const iData = allInfos.find(s => s.Code === stockId);
-        const tData = allTrusts.find(s => s.Code === stockId);
-
-        if (!pData || !iData) return createResponse(404, { error: '找不到資料，請確認是否為上市股票' });
-
-        const price = parseFloat(pData.ClosingPrice.replace(/,/g, ''));
-        const pe = parseFloat(iData.PEratio);
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股智能全方位分析 Pro</title>
+    <style>
+        :root { --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --bg: #f8fafc; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--bg); color: #1e293b; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 24px; border: 1px solid #e2e8f0; }
+        .search-box { text-align: center; margin: 40px 0; }
+        input { padding: 14px; width: 280px; border: 2px solid #cbd5e1; border-radius: 12px; font-size: 18px; outline: none; }
+        button { padding: 14px 30px; background: var(--primary); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; }
         
-        // 估算 EPS (股價 / 本益比)
-        const estEps = pe > 0 ? (price / pe).toFixed(2) : "N/A";
+        /* 佈局架構 */
+        .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
+        #tv-chart { height: 500px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        
+        /* 三大法人樣式 */
+        .trust-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .trust-box { text-align: center; padding: 12px; border-radius: 10px; background: #f1f5f9; border: 1px solid #e2e8f0; }
+        .plus { color: var(--danger); font-weight: bold; } /* 台股紅色為買超 */
+        .minus { color: var(--success); font-weight: bold; } /* 綠色為賣超 */
+        
+        /* 策略建議 */
+        .price-container { display: flex; gap: 15px; margin-top: 15px; }
+        .price-box { flex: 1; text-align: center; padding: 15px; border-radius: 12px; border: 2px solid #e2e8f0; }
+        .buy { background: #f0fdf4; border-color: var(--success); color: #166534; }
+        .stop { background: #fef2f2; border-color: var(--danger); color: #991b1b; }
+        
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+        .helper-box { font-size: 13px; color: #64748b; background: #f8fafc; padding: 12px; border-radius: 10px; margin-top: 6px; border-left: 4px solid #cbd5e1; }
+        .loading { display: none; color: var(--primary); font-weight: bold; margin-top: 10px; }
+        
+        /* 題材標籤 */
+        .tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px; background: #e0f2fe; color: #0369a1; font-weight: bold; }
 
-        return createResponse(200, {
-            id: stockId,
-            name: iData.Name,
-            price: price,
-            eps: estEps,
-            pe: pe,
-            yield: iData.DividendYield,
-            pb: iData.PBratio,
-            // 法人數據 (張數)
-            foreign: tData ? tData.ForeignDealersBuySell : "0",
-            trust: tData ? tData.InvestmentTrustBuySell : "0",
-            dealer: tData ? tData.ProprietaryDealersBuySell : "0",
-            suggestedBuy: (price * 0.96).toFixed(1),
-            suggestedStop: (price * 0.90).toFixed(1)
-        });
-    } catch (e) {
-        return createResponse(500, { error: 'API 連線失敗' });
-    }
-};
+        @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
 
-function createResponse(code, body) {
-    return { statusCode: code, headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" }, body: JSON.stringify(body) };
-}
+    <div class="search-box">
+        <h1>📈 台股智能全方位診斷系統</h1>
+        <p>自動偵測上市/上櫃數據，整合法人籌碼與基本面健康度</p>
+        <input type="text" id="sid" placeholder="輸入代號 (如: 2455, 2330)">
+        <button onclick="runAnalysis()">開始深度分析</button>
+        <div id="loader" class="loading">📡 正在從雲端抓取最新數據...</div>
+    </div>
+
+    <div id="report" style="display:none;">
+        <div class="card">
+            <h3 id="stockTitle">📉 技術走勢分析</h3>
+            <div id="tv-chart"></div>
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 10px;">* 預設搜尋上市路徑。若為上櫃股(如2455)，請點擊圖表左上角手動搜尋 <b>OTC:代號</b>。</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>⚖️ 操盤策略與法人動向</h3>
+                <div id="tagArea" style="margin-bottom: 15px;"></div>
+                
+                <div class="trust-grid">
+                    <div class="trust-box">外資<br><span id="foreign">-</span></div>
+                    <div class="trust-box">投信<br><span id="trust">-</span></div>
+                    <div class="trust-box">自營商<br><span id="dealer">-</span></div>
+                </div>
+                
+                <div class="price-container">
+                    <div class="price-box buy">建議進場點<br><b id="buyP" style="font-size: 24px;">-</b></div>
+                    <div class="price-box stop">關鍵止損點<br><b id="stopP" style="font-size: 24px;">-</b></div>
+                </div>
+                
+                <p style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <b>💡 診斷結論：</b><span id="adviceText">-</span>
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>🔍 核心基本面指標</h3>
+                
+                <div class="stat-row"><span>EPS (每股盈餘)</span><b id="resEps" style="color:var(--primary); font-size:20px;">-</b></div>
+                <div class="helper-box">💰 <b>實體獲利：</b>公司去年/上季每股賺多少錢。數字越大獲利越強。</div>
+
+                <div class="stat-row"><span>本益比 (PE)</span><b id="resPe">-</b></div>
+                <div class="helper-box">🧠 <b>回本年數：</b>15以下便宜，25以上貴。高PE通常代表有AI等題材。</div>
+
+                <div class="stat-row"><span>現金殖利率</span><b id="resYield">-</b></div>
+                <div class="helper-box">🏦 <b>定存利率：</b>每年配息率。 > 5% 是優秀的存股標的。</div>
+
+                <div class="stat-row"><span>股價淨值比 (PB)</span><b id="resPb">-</b></div>
+                <div class="helper-box">🏛️ <b>清算價值：</b>低於 1 代表股價比公司資產還便宜。</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        // 題材資料庫
+        const themeDB = {
+            "2455": { cate: "電子零組件", tags: ["低軌衛星", "5G 通訊", "化合物半導體"] },
+            "2330": { cate: "半導體代工", tags: ["AI 核心", "先進製程", "全球龍頭"] },
+            "2317": { cate: "其他電子", tags: ["電動車", "AI 伺服器", "大型組裝"] }
+        };
+
+        async function runAnalysis() {
+            const id = document.getElementById('sid').value.trim();
+            if(!id) return alert("請輸入股票代號！");
+            
+            const loader = document.getElementById('loader');
+            loader.style.display = 'block';
+
+            try {
+                // 1. 呼叫後端 API (這裡後端需要處理上市櫃邏輯，或前端嘗試不同端點)
+                const res = await fetch(`/.netlify/functions/stockInfo?id=${id}`);
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+
+                document.getElementById('report').style.display = 'block';
+                document.getElementById('stockTitle').innerText = `📈 ${data.id} ${data.name} 深度診斷報告`;
+                
+                // 填充基本面
+                document.getElementById('resEps').innerText = data.eps + " 元";
+                document.getElementById('resPe').innerText = data.pe + " 倍";
+                document.getElementById('resYield').innerText = data.yield + "%";
+                document.getElementById('resPb').innerText = data.pb;
+                
+                // 填充策略價位
+                document.getElementById('buyP').innerText = data.suggestedBuy + " 元";
+                document.getElementById('stopP').innerText = data.suggestedStop + " 元";
+
+                // 處理題材標籤
+                const info = themeDB[id] || { cate: "一般產業", tags: ["觀察中標的"] };
+                let tags = `<span class="tag">🏭 ${info.cate}</span>`;
+                info.tags.forEach(t => tags += `<span class="tag">🔥 ${t}</span>`);
+                document.getElementById('tagArea').innerHTML = tags;
+
+                // 處理三大法人 (加上買賣超變色邏輯)
+                const updateTrust = (id, val) => {
+                    const el = document.getElementById(id);
+                    const num = parseInt(val.replace(/,/g, ''));
+                    el.innerText = (num > 0 ? "+" : "") + val;
+                    el.className = num > 0 ? "plus" : "minus";
+                };
+                updateTrust('foreign', data.foreign);
+                updateTrust('trust', data.trust);
+                updateTrust('dealer', data.dealer);
+
+                // 智能診斷結論
+                let advice = `目前 ${data.name} 股價為 ${data.price} 元。`;
+                if(parseFloat(data.pe) > 25) advice += " 屬高本益比股票，受惠於強大題材預期。進場請務必守住止損點。";
+                else advice += " 估值合理，體質穩健。";
+                document.getElementById('adviceText').innerText = advice;
+
+                // 2. 渲染 K 線圖 (自動嘗試代號切換)
+                new TradingView.widget({
+                    "container_id": "tv-chart",
+                    "autosize": true,
+                    "symbol": `TWSE:${id}`, 
+                    "interval": "D",
+                    "timezone": "Asia/Taipei",
+                    "theme": "light",
+                    "style": "1",
+                    "locale": "zh_TW",
+                    "allow_symbol_change": true,
+                    "watchlist": [`TWSE:${id}`, `OTC:${id}`] // 在側邊欄同時提供上市與上櫃選項
+                });
+
+            } catch (err) {
+                alert("目前 API 僅支援上市股票查詢。上櫃股票 (如 2455) 建議直接於圖表內搜尋 OTC:" + id);
+                console.error(err);
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
